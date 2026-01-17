@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>FinanceHub - Personal Finance Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://apis.google.com/js/api.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .nav-btn.active { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; }
+        .card { backdrop-filter: blur(10px); }
+        .progress-bar { transition: width 0.5s ease; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #6366f1; border-radius: 4px; }
+        .alert-pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .drop-zone { border: 2px dashed #6366f1; transition: all 0.3s; }
+        .drop-zone.drag-over { border-color: #22c55e; background: rgba(34, 197, 94, 0.1); }
+        .sync-spin { animation: spin 1s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        
+        /* Mobile Styles */
+        .mobile-menu { transform: translateX(-100%); transition: transform 0.3s ease; }
+        .mobile-menu.open { transform: translateX(0); }
+        .mobile-overlay { opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+        .mobile-overlay.open { opacity: 1; pointer-events: auto; }
+        
+        @media (max-width: 768px) {
+            .desktop-sidebar { display: none; }
+            .mobile-header { display: flex !important; }
+            .main-content { margin-left: 0 !important; }
+            .chart-container { height: 250px !important; }
+            .modal-content { margin: 1rem; max-height: 90vh; overflow-y: auto; }
+        }
+        @media (min-width: 769px) {
+            .mobile-header { display: none !important; }
+            .mobile-menu { display: none !important; }
+            .mobile-overlay { display: none !important; }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 min-h-screen text-white">
+    <!-- Notification Container -->
+    <div id="notifications" class="fixed top-4 right-4 z-50 space-y-2 max-w-sm"></div>
+
+    <!-- Floating Status & Actions -->
+    <div class="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
+        <div id="floatingStatus" class="px-3 py-2 rounded-full border border-yellow-500/40 bg-yellow-500/15 text-yellow-200 text-xs font-semibold shadow-lg flex items-center gap-2">
+            <i class="fas fa-exclamation-circle"></i>
+            <span>Not Connected</span>
+        </div>
+        <button id="floatingSave" onclick="manualSync()" class="px-4 py-3 rounded-full border border-slate-600 bg-emerald-600 text-white shadow-lg flex items-center gap-2 hover:bg-emerald-500 transition">
+            <i class="fas fa-cloud-upload-alt"></i>
+            <span class="text-sm font-semibold">Sync</span>
+        </button>
+    </div>
+
+    <!-- Mobile Header -->
+    <header class="mobile-header hidden fixed top-0 left-0 right-0 h-16 bg-slate-800/95 backdrop-blur-lg border-b border-slate-700 z-40 items-center justify-between px-4">
+        <button onclick="toggleMobileMenu()" class="p-2 hover:bg-slate-700 rounded-lg">
+            <i class="fas fa-bars text-xl"></i>
+        </button>
+        <div class="flex items-center gap-2">
+            <div class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
+                <i class="fas fa-wallet"></i>
+            </div>
+            <span class="font-bold">FinanceHub</span>
+        </div>
+        <button onclick="manualSync()" class="p-2 hover:bg-slate-700 rounded-lg">
+            <i id="mobileSyncIcon" class="fas fa-cloud-upload-alt text-indigo-400"></i>
+        </button>
+    </header>
+
+    <!-- Mobile Menu Overlay -->
+    <div id="mobileOverlay" class="mobile-overlay fixed inset-0 bg-black/50 z-40" onclick="toggleMobileMenu()"></div>
+
+    <!-- Mobile Sidebar -->
+    <nav id="mobileMenu" class="mobile-menu fixed top-0 left-0 w-72 h-full bg-slate-800 z-50 overflow-y-auto">
+        <div class="p-4">
+            <div class="flex items-center justify-between mb-6">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
+                        <i class="fas fa-wallet text-xl"></i>
+                    </div>
+                    <h1 class="text-xl font-bold">FinanceHub</h1>
+                </div>
+                <button onclick="toggleMobileMenu()" class="p-2 hover:bg-slate-700 rounded-lg">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="space-y-2" id="mobileNavButtons"></div>
+            
+            <!-- Google Drive Status -->
+            <div id="mobileStorageStatus" class="mt-6 p-3 rounded-xl border border-yellow-500/30 bg-yellow-500/10">
+                <div class="flex items-center gap-2 mb-1">
+                    <i class="fas fa-exclamation-circle text-yellow-400"></i>
+                    <span class="font-semibold text-yellow-400">Not Connected</span>
+                </div>
+                <p class="text-xs text-slate-400">Connect to enable auto-sync</p>
+                <p id="mobileLastSaved" class="text-xs text-slate-500 mt-1"></p>
+            </div>
+            
+            <button onclick="connectToGoogleDrive(); toggleMobileMenu();" class="w-full mt-4 flex items-center justify-center gap-2 p-3 bg-indigo-500/20 text-indigo-400 rounded-xl">
+                <i class="fas fa-cloud"></i> Connect Google Drive
+            </button>
+        </div>
+    </nav>
+
+    <div class="flex">
+        <!-- Desktop Sidebar -->
+        <nav class="desktop-sidebar w-64 min-h-screen bg-slate-800/50 backdrop-blur-lg border-r border-slate-700 p-4 fixed flex flex-col">
+            <div class="flex items-center gap-3 mb-8 p-2">
+                <div class="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-wallet text-xl"></i>
+                </div>
+                <h1 class="text-xl font-bold">FinanceHub</h1>
+            </div>
+            
+            <div class="space-y-2 flex-1 overflow-y-auto pb-32" id="desktopNavButtons">
+                <button onclick="showTab('dashboard')" data-tab="dashboard" class="nav-btn active w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-700/50 transition">
+                    <i class="fas fa-chart-pie w-5"></i> Dashboard
+                </button>
+                <button onclick="showTab('import')" data-tab="import" class="nav-btn w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-700/50 transition">
+                    <i class="fas fa-file-import w-5"></i> Import Statement
+                </button>
+                <button onclick="showTab('budget')" data-tab="budget" class="nav-btn w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-700/50 transition">
+                    <i class="fas fa-piggy-bank w-5"></i> Budget Plans
+                </button>
+                <button onclick="showTab('expenses')" data-tab="expenses" class="nav-btn w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-700/50 transition">
+                    <i class="fas fa-credit-card w-5"></i> Expenses
+                </button>
+                <button onclick="showTab('income')" data-tab="income" class="nav-btn w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-700/50 transition">
+                    <i class="fas fa-money-bill-trend-up w-5"></i> Income
+                </button>
+                <button onclick="showTab('debts')" data-tab="debts" class="nav-btn w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-700/50 transition">
+                    <i class="fas fa-landmark w-5"></i> Debts
+                </button>
+                <button onclick="showTab('savings')" data-tab="savings" class="nav-btn w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-700/50 transition">
+                    <i class="fas fa-bullseye w-5"></i> Savings Goals
+                </button>
+                <button onclick="showTab('alerts')" data-tab="alerts" class="nav-btn w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-700/50 transition">
+                    <i class="fas fa-bell w-5"></i> Alerts
+                    <span id="alertBadge" class="hidden bg-red-500 text-xs px-2 py-0.5 rounded-full ml-auto">0</span>
+                </button>
+                <button onclick="showTab('bills')" data-tab="bills" class="nav-btn w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-700/50 transition">
+                    <i class="fas fa-file-invoice-dollar w-5"></i> Bills
+                </button>
+                <button onclick="showTab('reports')" data-tab="reports" class="nav-btn w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-700/50 transition">
+                    <i class="fas fa-chart-line w-5"></i> Reports
+                </button>
+                <button onclick="showTab('settings')" data-tab="settings" class="nav-btn w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-700/50 transition">
+                    <i class="fas fa-gear w-5"></i> Settings / Sync
+                </button>
+            </div>
+
+            <div class="mt-4 pt-2 border-t border-slate-700/60">
+                <!-- Google Drive Status -->
+                <div id="desktopStorageStatus" class="mb-3 p-3 rounded-xl border border-yellow-500/30 bg-yellow-500/10">
+                    <div class="flex items-center gap-2 mb-1">
+                        <i class="fas fa-exclamation-circle text-yellow-400"></i>
+                        <span class="text-sm font-semibold text-yellow-400">Not Connected</span>
+                    </div>
+                    <p class="text-xs text-slate-400">Connect Google Drive to enable auto-sync</p>
+                    <p id="desktopLastSaved" class="text-xs text-slate-500 mt-1"></p>
+                </div>
+                
+                <button onclick="connectToGoogleDrive()" id="desktopSyncBtn" class="w-full flex items-center justify-center gap-2 p-3 bg-indigo-500/20 text-indigo-400 rounded-xl hover:bg-indigo-500/30 transition">
+                    <i class="fas fa-cloud"></i> <span id="desktopSyncBtnText">Connect Google Drive</span>
+                </button>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content ml-64 flex-1 p-4 md:p-8 pt-20 md:pt-8 min-h-screen">
+            <!-- Dashboard Tab -->
+            <div id="dashboard" class="tab-content active">
+                <h2 class="text-2xl md:text-3xl font-bold mb-6">Dashboard Overview</h2>
+                
+                <!-- Summary Cards -->
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 mb-6 md:mb-8">
+                    <div class="card bg-gradient-to-br from-green-500/20 to-emerald-600/20 border border-green-500/30 rounded-2xl p-4 md:p-6">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-green-400 text-sm md:text-base">Income</span>
+                            <i class="fas fa-arrow-up text-green-400"></i>
+                        </div>
+                        <p id="totalIncome" class="text-xl md:text-3xl font-bold">$0</p>
+                        <p class="text-xs md:text-sm text-slate-400 mt-1">This month</p>
+                    </div>
+                    <div class="card bg-gradient-to-br from-red-500/20 to-rose-600/20 border border-red-500/30 rounded-2xl p-4 md:p-6">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-red-400 text-sm md:text-base">Expenses</span>
+                            <i class="fas fa-arrow-down text-red-400"></i>
+                        </div>
+                        <p id="totalExpenses" class="text-xl md:text-3xl font-bold">$0</p>
+                        <p class="text-xs md:text-sm text-slate-400 mt-1">This month</p>
+                    </div>
+                    <div class="card bg-gradient-to-br from-blue-500/20 to-indigo-600/20 border border-blue-500/30 rounded-2xl p-4 md:p-6">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-blue-400 text-sm md:text-base">Balance</span>
+                            <i class="fas fa-scale-balanced text-blue-400"></i>
+                        </div>
+                        <p id="netBalance" class="text-xl md:text-3xl font-bold">$0</p>
+                        <p class="text-xs md:text-sm text-slate-400 mt-1">This month</p>
+                    </div>
+                    <div class="card bg-gradient-to-br from-purple-500/20 to-violet-600/20 border border-purple-500/30 rounded-2xl p-4 md:p-6">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-purple-400 text-sm md:text-base">Debt</span>
+                            <i class="fas fa-landmark text-purple-400"></i>
+                        </div>
+                        <p id="totalDebt" class="text-xl md:text-3xl font-bold">$0</p>
+                        <p class="text-xs md:text-sm text-slate-400 mt-1">Remaining</p>
+                    </div>
+                </div>
+
+                <!-- Charts Row -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-6 md:mb-8">
+                    <div class="card bg-slate-800/50 border border-slate-700 rounded-2xl p-4 md:p-6">
+                        <h3 class="text-lg md:text-xl font-semibold mb-4">Spending by Category</h3>
+                        <div class="chart-container" style="height: 300px;"><canvas id="spendingChart"></canvas></div>
+                    </div>
+                    <div class="card bg-slate-800/50 border border-slate-700 rounded-2xl p-4 md:p-6">
+                        <h3 class="text-lg md:text-xl font-semibold mb-4">Income vs Expenses</h3>
+                        <div class="chart-container" style="height: 300px;"><canvas id="trendChart"></canvas></div>
+                    </div>
+                </div>
+
+                <!-- Budget Status & Recent -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-6">
+                    <div class="card bg-slate-800/50 border border-slate-700 rounded-2xl p-4 md:p-6">
+                        <h3 class="text-lg md:text-xl font-semibold mb-4">Budget Status</h3>
+                        <div id="budgetStatus" class="space-y-4 max-h-64 overflow-y-auto">
+                            <p class="text-slate-400">No budgets set</p>
+                        </div>
+                    </div>
+                    <div class="card bg-slate-800/50 border border-slate-700 rounded-2xl p-4 md:p-6">
+                        <h3 class="text-lg md:text-xl font-semibold mb-4">Recent Transactions</h3>
+                        <div id="recentTransactions" class="space-y-3 max-h-64 overflow-y-auto">
+                            <p class="text-slate-400">No transactions yet</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Tab -->
+            <div id="settings" class="tab-content">
+                <h2 class="text-2xl md:text-3xl font-bold mb-6">Settings & Google Drive Sync</h2>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+                    <div class="card bg-slate-800/50 border border-slate-700 rounded-2xl p-4 md:p-6">
+                        <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
+                            <i class="fab fa-google-drive text-2xl"></i>
+                            Connect to Google Drive
+                        </h3>
+                        <p class="text-sm text-slate-300 mb-3">Store your financial data in Google Drive for automatic sync across all your devices and easy sharing with family.</p>
+                        
+                        <div id="setupInstructions" class="space-y-2 text-sm text-slate-300 mb-4">
+                            <p class="font-semibold text-indigo-300">Quick Setup (3 minutes):</p>
+                            <ol class="list-decimal list-inside space-y-1 text-xs">
+                                <li>Visit <a href="https://console.cloud.google.com/" target="_blank" class="text-indigo-400 underline">Google Cloud Console</a></li>
+                                <li>Create a new project called "FinanceHub"</li>
+                                <li>Enable Google Drive API (APIs & Services → Library)</li>
+                                <li>Create credentials (API Key + OAuth Client ID)</li>
+                                <li>Add your domain to authorized JavaScript origins</li>
+                                <li>Update CLIENT_ID and API_KEY in the code below</li>
+                            </ol>
+                        </div>
+
+                        <div class="bg-slate-900/50 p-3 rounded-lg mb-4">
+                            <p class="text-xs text-slate-400 mb-2">Replace these in the code:</p>
+                            <code class="text-xs text-green-400">const GOOGLE_CLIENT_ID = 'YOUR_CLIENT_ID_HERE';</code><br>
+                            <code class="text-xs text-green-400">const GOOGLE_API_KEY = 'YOUR_API_KEY_HERE';</code>
+                        </div>
+
+                        <button onclick="connectToGoogleDrive()" class="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 font-semibold flex items-center justify-center gap-2">
+                            <i class="fab fa-google-drive"></i> Connect Google Drive
+                        </button>
+                        <div class="mt-3 text-xs text-slate-400" id="settingsStatus"></div>
+                    </div>
+
+                    <div class="card bg-slate-800/50 border border-slate-700 rounded-2xl p-4 md:p-6">
+                        <h3 class="text-lg font-semibold mb-3">Auto-Sync Features</h3>
+                        <ul class="space-y-2 text-sm text-slate-300 list-disc list-inside">
+                            <li>Auto-saves every 3 seconds after changes</li>
+                            <li>Auto-refreshes every 30 seconds from Google Drive</li>
+                            <li>Works on all browsers (Chrome, Firefox, Safari, Edge)</li>
+                            <li>Share the file with family for multi-user access</li>
+                            <li>All data stored in your Google Drive (private & secure)</li>
+                            <li>No monthly fees - completely free!</li>
+                        </ul>
+
+                        <div class="mt-4 p-3 rounded-xl bg-blue-500/10 border border-blue-500/30">
+                            <p class="text-sm text-blue-200"><strong>💡 Tip:</strong> After connecting, your data file will be created in Google Drive as "FinanceHub-Data.json". Share this file with family members to collaborate!</p>
+                        </div>
+
+                        <div class="mt-4 p-3 rounded-xl bg-slate-700/50 border border-slate-600 text-sm text-slate-200">
+                            Need help? Check the <a href="#" onclick="showTab('dashboard'); return false;" class="text-indigo-400 underline">Dashboard</a> for connection status or use the floating Sync button anytime.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Other tabs... (keeping original structure) -->
+            <div id="import" class="tab-content">
+                <h2 class="text-2xl md:text-3xl font-bold mb-6">Import Bank Statement</h2>
+                <div class="card bg-slate-800/50 border border-slate-700 rounded-2xl p-4 md:p-6">
+                    <p class="text-slate-400">CSV import functionality - connect to Google Drive first</p>
+                </div>
+            </div>
+
+            <div id="budget" class="tab-content">
+                <h2 class="text-2xl md:text-3xl font-bold mb-6">Budget Plans</h2>
+                <div id="budgetList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+                    <p class="text-slate-400 col-span-full">No budgets created yet.</p>
+                </div>
+            </div>
+
+            <div id="expenses" class="tab-content">
+                <h2 class="text-2xl md:text-3xl font-bold mb-6">Expenses</h2>
+                <div class="card bg-slate-800/50 border border-slate-700 rounded-2xl p-4">
+                    <p class="text-slate-400">Connect to Google Drive to manage expenses</p>
+                </div>
+            </div>
+
+            <div id="income" class="tab-content">
+                <h2 class="text-2xl md:text-3xl font-bold mb-6">Income</h2>
+                <div class="card bg-slate-800/50 border border-slate-700 rounded-2xl p-4">
+                    <p class="text-slate-400">Connect to Google Drive to track income</p>
+                </div>
+            </div>
+
+            <div id="debts" class="tab-content">
+                <h2 class="text-2xl md:text-3xl font-bold mb-6">Debt Management</h2>
+                <div class="card bg-slate-800/50 border border-slate-700 rounded-2xl p-4">
+                    <p class="text-slate-400">Connect to Google Drive to manage debts</p>
+                </div>
+            </div>
+
+            <div id="savings" class="tab-content">
+                <h2 class="text-2xl md:text-3xl font-bold mb-6">Savings Goals</h2>
+                <div class="card bg-slate-800/50 border border-slate-700 rounded-2xl p-4">
+                    <p class="text-slate-400">Connect to Google Drive to set savings goals</p>
+                </div>
+            </div>
+
+            <div id="alerts" class="tab-content">
+                <h2 class="text-2xl md:text-3xl font-bold mb-6">Alerts</h2>
+                <div class="card bg-slate-800/50 border border-slate-700 rounded-2xl p-4">
+                    <p class="text-slate-400">Connect to Google Drive to create alerts</p>
+                </div>
+            </div>
+
+            <div id="bills" class="tab-content">
+                <h2 class="text-2xl md:text-3xl font-bold mb-6">Bills</h2>
+                <div class="card bg-slate-800/50 border border-slate-700 rounded-2xl p-4">
+                    <p class="text-slate-400">Connect to Google Drive to track bills</p>
+                </div>
+            </div>
+
+            <div id="reports" class="tab-content">
+                <h2 class="text-2xl md:text-3xl font-bold mb-6">Reports</h2>
+                <div class="card bg-slate-800/50 border border-slate-700 rounded-2xl p-4">
+                    <p class="text-slate-400">Connect to Google Drive to view reports</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // IMPORTANT: Replace these with your actual Google Cloud credentials
+        const GOOGLE_CLIENT_ID = '898304635456-or851ktrosa9bg7pac49bp28dn607thn.apps.googleusercontent.com';
+        const GOOGLE_API_KEY = 'AIzaSyC2JEMkwbcntt2WNRMREXBwpzHjZgG9tak';
+        const FILE_NAME = 'FinanceHub-Data.json';
+        const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+
+        // Data state
+        let data = { budgets: [], expenses: [], income: [], debts: [], savings: [], alerts: [], categoryRules: [], bills: [], importHistory: [] };
+        let isConnected = false;
+        let isSyncing = false;
+        let lastSaved = null;
+        let fileId = null;
+        let autoSaveTimeout = null;
+        let autoRefreshInterval = null;
+
+        // Chart instances
+        let spendingChartInstance = null;
+        let trendChartInstance = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            setupMobileNav();
+            loadGoogleAPI();
+        });
+
+        function loadGoogleAPI() {
+            window.gapi.load('client:auth2', initializeGoogleAPI);
+        }
+
+        async function initializeGoogleAPI() {
+            try {
+                await window.gapi.client.init({
+                    apiKey: GOOGLE_API_KEY,
+                    clientId: GOOGLE_CLIENT_ID,
+                    discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
+                    scope: SCOPES
+                });
+
+                const authInstance = window.gapi.auth2.getAuthInstance();
+                authInstance.isSignedIn.listen(updateSigninStatus);
+
+                if (authInstance.isSignedIn.get()) {
+                    isConnected = true;
+                    updateStorageStatus();
+                    await loadFromGoogleDrive();
+                    startAutoRefresh();
+                }
+            } catch (error) {
+                console.error('Google API init error:', error);
+                showNotification('Failed to initialize Google Drive', 'error');
+            }
+        }
+
+        function updateSigninStatus(signedIn) {
+            isConnected = signedIn;
+            updateStorageStatus();
+            if (signedIn) {
+                loadFromGoogleDrive();
+                startAutoRefresh();
+            } else {
+                stopAutoRefresh();
+            }
+        }
+
+        async function connectToGoogleDrive() {
+            try {
+                const authInstance = window.gapi.auth2.getAuthInstance();
+                await authInstance.signIn();
+                showNotification('Connected to Google Drive!', 'success');
+            } catch (error) {
+                console.error('Sign in error:', error);
+                showNotification('Failed to connect to Google Drive', 'error');
+            }
+        }
+
+        async function findOrCreateFile() {
+            if (fileId) return fileId;
+
+            try {
+                const response = await window.gapi.client.drive.files.list({
+                    q: `name='${FILE_NAME}' and mimeType='application/json' and trashed=false`,
+                    fields: 'files(id, name)',
+                    spaces: 'drive'
+                });
+
+                if (response.result.files && response.result.files.length > 0) {
+                    fileId = response.result.files[0].id;
+                    return fileId;
+                }
+
+                // Create new file
+                const fileMetadata = {
+                    name: FILE_NAME,
+                    mimeType: 'application/json'
+                };
+
+                const createResponse = await window.gapi.client.drive.files.create({
+                    resource: fileMetadata,
+                    fields: 'id'
+                });
+
+                fileId = createResponse.result.id;
+                return fileId;
+            } catch (error) {
+                console.error('Error finding/creating file:', error);
+                throw error;
+            }
+        }
+
+        async function saveToGoogleDrive(showNotif = false) {
+            if (!isConnected) return;
+
+            isSyncing = true;
+            updateStorageStatus();
+
+            try {
+                const id = await findOrCreateFile();
+                
+                const dataToSave = {
+                    ...data,
+                    lastModified: new Date().toISOString()
+                };
+
+                const boundary = '-------314159265358979323846';
+                const delimiter = "\r\n--" + boundary + "\r\n";
+                const close_delim = "\r\n--" + boundary + "--";
+
+                const contentType = 'application/json';
+                const metadata = { mimeType: contentType };
+
+                const multipartRequestBody =
+                    delimiter +
+                    'Content-Type: application/json\r\n\r\n' +
+                    JSON.stringify(metadata) +
+                    delimiter +
+                    'Content-Type: ' + contentType + '\r\n\r\n' +
+                    JSON.stringify(dataToSave, null, 2) +
+                    close_delim;
+
+                const request = window.gapi.client.request({
+                    path: `/upload/drive/v3/files/${id}`,
+                    method: 'PATCH',
+                    params: { uploadType: 'multipart' },
+                    headers: {
+                        'Content-Type': 'multipart/related; boundary="' + boundary + '"'
+                    },
+                    body: multipartRequestBody
+                });
+
+                await request;
+                lastSaved = new Date();
+                updateStorageStatus();
+                
+                if (showNotif) {
+                    showNotification('✓ Saved to Google Drive', 'success');
+                }
+            } catch (error) {
+                console.error('Save error:', error);
+                showNotification('Failed to save to Google Drive', 'error');
+            } finally {
+                isSyncing = false;
+                updateStorageStatus();
+            }
+        }
+
+        async function loadFromGoogleDrive(silent = false) {
+            if (!isConnected) return;
+
+            if (!silent) {
+                isSyncing = true;
+                updateStorageStatus();
+            }
+
+            try {
+                const id = await findOrCreateFile();
+
+                const response = await window.gapi.client.drive.files.get({
+                    fileId: id,
+                    alt: 'media'
+                });
+
+                if (response.result) {
+                    const loadedData = response.result;
+                    
+                    const remoteTime = new Date(loadedData.lastModified).getTime();
+                    const localTime = lastSaved ? lastSaved.getTime() : 0;
+                    
+                    if (remoteTime > localTime || !lastSaved) {
+                        data = {
+                            budgets: loadedData.budgets || [],
+                            expenses: loadedData.expenses || [],
+                            income: loadedData.income || [],
+                            debts: loadedData.debts || [],
+                            savings: loadedData.savings || [],
+                            alerts: loadedData.alerts || [],
+                            categoryRules: loadedData.categoryRules || [],
+                            bills: loadedData.bills || [],
+                            importHistory: loadedData.importHistory || []
+                        };
+                        
+                        lastSaved = new Date(loadedData.lastModified);
+                        updateStorageStatus();
+                        renderAll();
+                        
+                        if (!silent) {
+                            showNotification('✓ Loaded from Google Drive', 'success');
+                        }
+                    }
+                }
+            } catch (error) {
+                if (error.status === 404) {
+                    if (!silent) {
+                        await saveToGoogleDrive(true);
+                    }
+                } else {
+                    console.error('Load error:', error);
+                    if (!silent) {
+                        showNotification('Failed to load from Google Drive', 'error');
+                    }
+                }
+            } finally {
+                if (!silent) {
+                    isSyncing = false;
+                    updateStorageStatus();
+                }
+            }
+        }
+
+        function saveData() {
+            // Auto-save with debounce
+            if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
+            autoSaveTimeout = setTimeout(() => {
+                saveToGoogleDrive(false);
+            }, 3000); // 3 second debounce
+        }
+
+        function manualSync() {
+            if (!isConnected) {
+                connectToGoogleDrive();
+            } else {
+                saveToGoogleDrive(true);
+            }
+        }
+
+        function startAutoRefresh() {
+            if (autoRefreshInterval) return;
+            autoRefreshInterval = setInterval(() => {
+                loadFromGoogleDrive(true);
+            }, 30000); // 30 seconds
+        }
+
+        function stopAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+            }
+        }
+
+        function updateStorageStatus() {
+            // Desktop status
+            const desktopStatus = document.getElementById('desktopStorageStatus');
+            const desktopSyncBtnText = document.getElementById('desktopSyncBtnText');
+            
+            if (desktopStatus) {
+                if (isConnected) {
+                    desktopStatus.className = 'mb-3 p-3 rounded-xl border border-green-500/30 bg-green-500/10';
+                    desktopStatus.innerHTML = `
+                        <div class="flex items-center gap-2 mb-1">
+                            <i class="fas ${isSyncing ? 'fa-sync-alt sync-spin' : 'fa-check-circle'} text-green-400"></i>
+                            <span class="text-sm font-semibold text-green-400">${isSyncing ? 'Syncing...' : 'Google Drive Connected'}</span>
+                        </div>
+                        <p class="text-xs text-slate-400">Auto-sync active</p>
+                        <p id="desktopLastSaved" class="text-xs text-slate-500 mt-1">Last saved: ${lastSaved ? lastSaved.toLocaleTimeString() : 'Never'}</p>
+                    `;
+                } else {
+                    desktopStatus.className = 'mb-3 p-3 rounded-xl border border-yellow-500/30 bg-yellow-500/10';
+                    desktopStatus.innerHTML = `
+                        <div class="flex items-center gap-2 mb-1">
+                            <i class="fas fa-exclamation-circle text-yellow-400"></i>
+                            <span class="text-sm font-semibold text-yellow-400">Not Connected</span>
+                        </div>
+                        <p class="text-xs text-slate-400">Connect Google Drive to enable auto-sync</p>
+                        <p id="desktopLastSaved" class="text-xs text-slate-500 mt-1">${lastSaved ? 'Last saved: ' + lastSaved.toLocaleTimeString() : ''}</p>
+                    `;
+                }
+            }
+            
+            if (desktopSyncBtnText) {
+                desktopSyncBtnText.textContent = isConnected ? 'Sync Now' : 'Connect Google Drive';
+            }
+            
+            // Mobile status
+            const mobileStatus = document.getElementById('mobileStorageStatus');
+            if (mobileStatus) {
+                if (isConnected) {
+                    mobileStatus.className = 'mt-6 p-3 rounded-xl border border-green-500/30 bg-green-500/10';
+                    mobileStatus.innerHTML = `
+                        <div class="flex items-center gap-2 mb-1">
+                            <i class="fas ${isSyncing ? 'fa-sync-alt sync-spin' : 'fa-check-circle'} text-green-400"></i>
+                            <span class="font-semibold text-green-400">${isSyncing ? 'Syncing...' : 'Connected'}</span>
+                        </div>
+                        <p class="text-xs text-slate-400">Auto-sync active</p>
+                        <p id="mobileLastSaved" class="text-xs text-slate-500 mt-1">Last saved: ${lastSaved ? lastSaved.toLocaleTimeString() : 'Never'}</p>
+                    `;
+                } else {
+                    mobileStatus.className = 'mt-6 p-3 rounded-xl border border-yellow-500/30 bg-yellow-500/10';
+                    mobileStatus.innerHTML = `
+                        <div class="flex items-center gap-2 mb-1">
+                            <i class="fas fa-exclamation-circle text-yellow-400"></i>
+                            <span class="font-semibold text-yellow-400">Not Connected</span>
+                        </div>
+                        <p class="text-xs text-slate-400">Connect to enable auto-sync</p>
+                        <p id="mobileLastSaved" class="text-xs text-slate-500 mt-1">${lastSaved ? 'Last saved: ' + lastSaved.toLocaleTimeString() : ''}</p>
+                    `;
+                }
+            }
+
+            // Floating status
+            const floatingStatus = document.getElementById('floatingStatus');
+            if (floatingStatus) {
+                const icon = floatingStatus.querySelector('i');
+                const text = floatingStatus.querySelector('span');
+                if (isConnected) {
+                    floatingStatus.className = 'px-3 py-2 rounded-full border border-green-500/40 bg-green-500/15 text-green-200 text-xs font-semibold shadow-lg flex items-center gap-2';
+                    if (icon) icon.className = isSyncing ? 'fas fa-sync-alt sync-spin' : 'fas fa-check-circle';
+                    if (text) text.textContent = isSyncing ? 'Syncing...' : 'Google Drive Connected';
+                } else {
+                    floatingStatus.className = 'px-3 py-2 rounded-full border border-yellow-500/40 bg-yellow-500/15 text-yellow-200 text-xs font-semibold shadow-lg flex items-center gap-2';
+                    if (icon) icon.className = 'fas fa-exclamation-circle';
+                    if (text) text.textContent = 'Not Connected';
+                }
+            }
+
+            // Floating sync button
+            const floatingSave = document.getElementById('floatingSave');
+            if (floatingSave) {
+                const icon = floatingSave.querySelector('i');
+                const text = floatingSave.querySelector('span');
+                if (icon) icon.className = isSyncing ? 'fas fa-sync-alt sync-spin' : 'fas fa-cloud-upload-alt';
+                if (text) text.textContent = isConnected ? 'Sync' : 'Connect';
+            }
+        }
+
+        // Utility functions
+        function showNotification(message, type = 'info') {
+            const container = document.getElementById('notifications');
+            const colors = { success: 'bg-green-500', error: 'bg-red-500', warning: 'bg-yellow-500', info: 'bg-blue-500' };
+            const icons = { success: 'check', error: 'times', warning: 'exclamation', info: 'info' };
+            const div = document.createElement('div');
+            div.className = `${colors[type]} text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 text-sm`;
+            div.innerHTML = `<i class="fas fa-${icons[type]}-circle"></i> ${message}`;
+            container.appendChild(div);
+            setTimeout(() => div.remove(), 4000);
+        }
+
+        function formatCurrency(n) { 
+            return new Intl.NumberFormat('en-US', { 
+                style: 'currency', 
+                currency: 'USD', 
+                minimumFractionDigits: 0, 
+                maximumFractionDigits: 0 
+            }).format(n); 
+        }
+
+        // Navigation
+        function showTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(tabId)?.classList.add('active');
+            document.querySelectorAll(`[data-tab="${tabId}"]`).forEach(b => b.classList.add('active'));
+        }
+
+        function setupMobileNav() {
+            const navHTML = `
+                <button onclick="showTab('dashboard'); toggleMobileMenu();" data-tab="dashboard" class="nav-btn active w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-700/50"><i class="fas fa-chart-pie w-5"></i> Dashboard</button>
+                <button onclick="showTab('import'); toggleMobileMenu();" data-tab="import" class="nav-btn w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-700/50"><i class="fas fa-file-import w-5"></i> Import</button>
+                <button onclick="showTab('budget'); toggleMobileMenu();" data-tab="budget" class="nav-btn w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-700/50"><i class="fas fa-piggy-bank w-5"></i> Budget</button>
+                <button onclick="showTab('expenses'); toggleMobileMenu();" data-tab="expenses" class="nav-btn w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-700/50"><i class="fas fa-credit-card w-5"></i> Expenses</button>
+                <button onclick="showTab('income'); toggleMobileMenu();" data-tab="income" class="nav-btn w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-700/50"><i class="fas fa-money-bill-trend-up w-5"></i> Income</button>
+                <button onclick="showTab('debts'); toggleMobileMenu();" data-tab="debts" class="nav-btn w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-700/50"><i class="fas fa-landmark w-5"></i> Debts</button>
+                <button onclick="showTab('savings'); toggleMobileMenu();" data-tab="savings" class="nav-btn w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-700/50"><i class="fas fa-bullseye w-5"></i> Savings</button>
+                <button onclick="showTab('alerts'); toggleMobileMenu();" data-tab="alerts" class="nav-btn w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-700/50"><i class="fas fa-bell w-5"></i> Alerts</button>
+                <button onclick="showTab('bills'); toggleMobileMenu();" data-tab="bills" class="nav-btn w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-700/50"><i class="fas fa-file-invoice-dollar w-5"></i> Bills</button>
+                <button onclick="showTab('reports'); toggleMobileMenu();" data-tab="reports" class="nav-btn w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-700/50"><i class="fas fa-chart-line w-5"></i> Reports</button>
+                <button onclick="showTab('settings'); toggleMobileMenu();" data-tab="settings" class="nav-btn w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-700/50"><i class="fas fa-gear w-5"></i> Settings</button>
+            `;
+            document.getElementById('mobileNavButtons').innerHTML = navHTML;
+        }
+
+        function toggleMobileMenu() {
+            document.getElementById('mobileMenu').classList.toggle('open');
+            document.getElementById('mobileOverlay').classList.toggle('open');
+        }
+
+        // Render functions
+        function renderAll() {
+            renderDashboard();
+        }
+
+        function renderDashboard() {
+            const month = new Date().toISOString().substring(0, 7);
+            const monthIncome = data.income.filter(i => i.date && i.date.startsWith(month)).reduce((s, i) => s + i.amount, 0);
+            const monthExpenses = data.expenses.filter(e => e.date && e.date.startsWith(month)).reduce((s, e) => s + e.amount, 0);
+            const totalDebt = data.debts.reduce((s, d) => s + d.remaining, 0);
+
+            document.getElementById('totalIncome').textContent = formatCurrency(monthIncome);
+            document.getElementById('totalExpenses').textContent = formatCurrency(monthExpenses);
+            document.getElementById('netBalance').textContent = formatCurrency(monthIncome - monthExpenses);
+            document.getElementById('totalDebt').textContent = formatCurrency(totalDebt);
+
+            // Budget status
+            document.getElementById('budgetStatus').innerHTML = data.budgets.length ? data.budgets.map(b => {
+                const spent = data.expenses.filter(e => e.category === b.category && e.date && e.date.startsWith(month)).reduce((s, e) => s + e.amount, 0);
+                const pct = Math.min(100, (spent / b.amount) * 100);
+                const color = pct >= 100 ? 'bg-red-500' : pct >= 80 ? 'bg-yellow-500' : 'bg-green-500';
+                return `<div><div class="flex justify-between text-sm mb-1"><span>${b.category}</span><span class="text-slate-400">${formatCurrency(spent)}/${formatCurrency(b.amount)}</span></div><div class="h-2 bg-slate-700 rounded-full overflow-hidden"><div class="h-full ${color}" style="width:${pct}%"></div></div></div>`;
+            }).join('') : '<p class="text-slate-400">No budgets set. Connect to Google Drive to create budgets.</p>';
+
+            // Recent transactions
+            const recent = [...data.expenses.map(e => ({ ...e, type: 'expense' })), ...data.income.map(i => ({ ...i, type: 'income' }))].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 5);
+            document.getElementById('recentTransactions').innerHTML = recent.length ? recent.map(t => `
+                <div class="flex items-center justify-between p-2 bg-slate-700/30 rounded-lg">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <div class="w-8 h-8 rounded-full ${t.type === 'income' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'} flex items-center justify-center flex-shrink-0">
+                            <i class="fas fa-${t.type === 'income' ? 'arrow-up' : 'arrow-down'} text-xs"></i>
+                        </div>
+                        <div class="min-w-0"><p class="text-sm truncate">${t.description || t.source}</p><p class="text-xs text-slate-400">${t.date}</p></div>
+                    </div>
+                    <span class="${t.type === 'income' ? 'text-green-400' : 'text-red-400'} font-medium text-sm whitespace-nowrap">${t.type === 'income' ? '+' : '-'}${formatCurrency(t.amount)}</span>
+                </div>
+            `).join('') : '<p class="text-slate-400">No transactions yet. Connect to Google Drive to start tracking.</p>';
+
+            renderCharts();
+        }
+
+        function renderCharts() {
+            const month = new Date().toISOString().substring(0, 7);
+            const catSpending = {};
+            data.expenses.filter(e => e.date && e.date.startsWith(month)).forEach(e => catSpending[e.category] = (catSpending[e.category] || 0) + e.amount);
+
+            const spendCtx = document.getElementById('spendingChart').getContext('2d');
+            if (spendingChartInstance) spendingChartInstance.destroy();
+            const colors = ['#6366f1', '#22c55e', '#f97316', '#eab308', '#ec4899', '#3b82f6', '#a855f7', '#ef4444'];
+            spendingChartInstance = new Chart(spendCtx, {
+                type: 'doughnut',
+                data: { 
+                    labels: Object.keys(catSpending).length ? Object.keys(catSpending) : ['No Data'], 
+                    datasets: [{ 
+                        data: Object.keys(catSpending).length ? Object.values(catSpending) : [1], 
+                        backgroundColor: colors, 
+                        borderWidth: 0 
+                    }] 
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    plugins: { 
+                        legend: { 
+                            position: 'bottom', 
+                            labels: { color: '#94a3b8', boxWidth: 12 } 
+                        } 
+                    } 
+                }
+            });
+
+            const months = [], incData = [], expData = [];
+            for (let i = 5; i >= 0; i--) {
+                const d = new Date(); 
+                d.setMonth(d.getMonth() - i);
+                const m = d.toISOString().substring(0, 7);
+                months.push(d.toLocaleString('default', { month: 'short' }));
+                incData.push(data.income.filter(x => x.date && x.date.startsWith(m)).reduce((s, x) => s + x.amount, 0));
+                expData.push(data.expenses.filter(x => x.date && x.date.startsWith(m)).reduce((s, x) => s + x.amount, 0));
+            }
+
+            const trendCtx = document.getElementById('trendChart').getContext('2d');
+            if (trendChartInstance) trendChartInstance.destroy();
+            trendChartInstance = new Chart(trendCtx, {
+                type: 'bar',
+                data: { 
+                    labels: months, 
+                    datasets: [
+                        { label: 'Income', data: incData, backgroundColor: '#22c55e' }, 
+                        { label: 'Expenses', data: expData, backgroundColor: '#ef4444' }
+                    ] 
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    scales: { 
+                        x: { ticks: { color: '#94a3b8' }, grid: { display: false } }, 
+                        y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } } 
+                    }, 
+                    plugins: { legend: { labels: { color: '#94a3b8' } } } 
+                }
+            });
+        }
+    </script>
+</body>
+</html>
