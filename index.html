@@ -1273,9 +1273,8 @@
             restoreViewMode();
             updateFloatingToggle(localStorage.getItem('financeViewMode') || 'desktop');
             
-            // Initialize Google API
-            gapiLoaded();
-            gisLoaded();
+            // Initialize Google API - wait for libraries to load
+            waitForGoogleLibraries();
             
             // Show setup modal if first time
             if (!data.lastSaved && data.budgets.length === 0) {
@@ -1283,6 +1282,27 @@
                 document.getElementById('setupModal').classList.add('flex');
             }
         });
+        
+        // Wait for Google libraries to load before initializing
+        function waitForGoogleLibraries() {
+            const checkInterval = setInterval(() => {
+                if (typeof gapi !== 'undefined' && typeof google !== 'undefined' && google.accounts) {
+                    clearInterval(checkInterval);
+                    gapiLoaded();
+                    gisLoaded();
+                    console.log('Google APIs initialized successfully');
+                }
+            }, 100); // Check every 100ms
+            
+            // Timeout after 10 seconds
+            setTimeout(() => {
+                clearInterval(checkInterval);
+                if (!gapiInited || !gisInited) {
+                    console.error('Google APIs failed to load');
+                    showNotification('Google Drive initialization failed. Please refresh the page.', 'error');
+                }
+            }, 10000);
+        }
 
         function closeSetupModal() {
             document.getElementById('setupModal').classList.add('hidden');
@@ -1313,7 +1333,11 @@
 
         async function connectGoogleDrive() {
             if (!gapiInited || !gisInited) {
-                showNotification('Google API not ready. Please refresh the page.', 'error');
+                showNotification('Google API is still loading... Please wait a moment and try again.', 'warning');
+                console.log('API Status - gapi:', gapiInited, 'gis:', gisInited);
+                
+                // Try to reinitialize
+                waitForGoogleLibraries();
                 return;
             }
 
