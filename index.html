@@ -2003,35 +2003,88 @@
 
             <!-- Settings Tab -->
             <div id="settings" class="tab-content">
-                <h2 class="text-2xl md:text-3xl font-bold mb-6">Settings &amp; OneDrive Sync</h2>
+                <h2 class="text-2xl md:text-3xl font-bold mb-6">Settings &amp; Cloud Sync</h2>
 
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-6">
+                    <!-- Google Drive Section -->
+                    <div class="card bg-slate-800/50 border border-slate-700 rounded-2xl p-4 md:p-6">
+                        <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
+                            <i class="fab fa-google-drive text-2xl text-blue-400"></i>
+                            Google Drive Sync (Recommended!)
+                        </h3>
+                        <p class="text-sm text-slate-300 mb-3">Connect your Google Drive for automatic cloud backup and sync across all devices. <strong>Stays logged in!</strong></p>
+                        
+                        <div class="space-y-2 text-sm text-slate-300 mb-4">
+                            <p class="font-semibold text-indigo-300">Quick Setup:</p>
+                            <ol class="list-decimal list-inside space-y-1 text-xs">
+                                <li>Visit <a href="https://console.cloud.google.com/" target="_blank" class="text-indigo-400 underline">Google Cloud Console</a></li>
+                                <li>Create project → Enable Google Drive API</li>
+                                <li>Create OAuth Client ID (Web app)</li>
+                                <li>Add authorized origins (http://localhost:8000)</li>
+                                <li>Update GOOGLE_CLIENT_ID in this file (search for YOUR_CLIENT_ID_HERE)</li>
+                            </ol>
+                        </div>
+
+                        <div class="bg-slate-900/50 p-3 rounded-lg mb-3">
+                            <p class="text-xs text-slate-400 mb-1">Find this in the code (~line 2452):</p>
+                            <code class="text-xs text-green-400">const GOOGLE_CLIENT_ID = 'YOUR_CLIENT_ID_HERE';</code>
+                        </div>
+
+                        <button onclick="connectGoogleDrive()" class="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition">
+                            <i class="fab fa-google-drive"></i> Connect Google Drive
+                        </button>
+                        
+                        <div class="mt-3 text-xs text-slate-400">After connecting, you'll stay logged in automatically!</div>
+                    </div>
+
+                    <!-- Benefits -->
+                    <div class="card bg-slate-800/50 border border-slate-700 rounded-2xl p-4 md:p-6">
+                        <h3 class="text-lg font-semibold mb-3">Why Google Drive?</h3>
+                        <ul class="space-y-2 text-sm text-slate-300 list-disc list-inside">
+                            <li>✨ <strong>Stays logged in</strong> - No repeated sign-ins!</li>
+                            <li>🔄 Auto-saves every 3 seconds after changes</li>
+                            <li>☁️ Auto-syncs every 30 seconds with Drive</li>
+                            <li>📱 Access from any device (phone, tablet, PC)</li>
+                            <li>👨‍👩‍👧‍👦 Share file with family for collaboration</li>
+                            <li>🔒 Your data stays in YOUR Google Drive</li>
+                            <li>💰 100% free forever - no subscriptions!</li>
+                            <li>🌐 Works in all modern browsers</li>
+                        </ul>
+                        
+                        <div class="mt-4 p-3 rounded-xl bg-blue-500/10 border border-blue-500/30">
+                            <p class="text-sm text-blue-200"><strong>💡 Pro Tip:</strong> After connecting, your data is saved as "FinanceHub_Data.json" in Google Drive. You can share this file with family!</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Local File Saving (Alternative) -->
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
                     <div class="card bg-slate-800/50 border border-slate-700 rounded-2xl p-4 md:p-6">
-                        <h3 class="text-lg font-semibold mb-3">Connect to a OneDrive file</h3>
-                        <p class="text-sm text-slate-300 mb-3">Store this HTML file in your OneDrive folder. Click the button below to connect and enable auto-save so every change is written back to the same file.</p>
+                        <h3 class="text-lg font-semibold mb-3">Local File Saving (Alternative)</h3>
+                        <p class="text-sm text-slate-300 mb-3">Store this HTML file locally or in OneDrive for auto-save.</p>
                         <div class="space-y-2 text-sm text-slate-300">
-                            <p>1) Move this FinanceHub.html file into a OneDrive-synced folder.</p>
-                            <p>2) Open it from that folder (double-click in Explorer/Finder).</p>
-                            <p>3) Click <span class="font-semibold text-indigo-300">Save to File</span> once to grant write access.</p>
-                            <p>4) All changes auto-save; close and reopen on any device with OneDrive to continue where you left off.</p>
+                            <p>1) Save this HTML file to your desired location</p>
+                            <p>2) Open it from that location</p>
+                            <p>3) Click <span class="font-semibold text-indigo-300">Save to File</span> to grant access</p>
+                            <p>4) All changes auto-save to the file</p>
                         </div>
                         <button onclick="manualSave()" class="mt-4 w-full px-4 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 font-semibold flex items-center justify-center gap-2">
-                            <i class="fas fa-plug"></i> Connect / Save to File
+                            <i class="fas fa-save"></i> Save to File
                         </button>
                         <div class="mt-3 text-xs text-slate-400" id="settingsStatus"></div>
                     </div>
 
                     <div class="card bg-slate-800/50 border border-slate-700 rounded-2xl p-4 md:p-6">
-                        <h3 class="text-lg font-semibold mb-3">Auto-Save &amp; Sync Tips</h3>
+                        <h3 class="text-lg font-semibold mb-3">Auto-Save Tips</h3>
                         <ul class="space-y-2 text-sm text-slate-300 list-disc list-inside">
-                            <li>Auto-save is enabled when connected (green status pill at bottom-right).</li>
-                            <li>File handles are session-based; after a browser restart, click “Connect / Save to File” once to re-authorize.</li>
-                            <li>Keep the file name unchanged while it’s open.</li>
-                            <li>For shared access, share the OneDrive folder; all collaborators open the same HTML file.</li>
-                            <li>If a device can’t connect, use “Download Backup” under Reports to capture your latest data.</li>
+                            <li>Green status = auto-save enabled</li>
+                            <li>After browser restart, reconnect once</li>
+                            <li>Keep file name unchanged while open</li>
+                            <li>For sharing, use Google Drive (recommended!)</li>
+                            <li>Use "Download Backup" to export data</li>
                         </ul>
                         <div class="mt-4 p-3 rounded-xl bg-slate-700/50 border border-slate-600 text-sm text-slate-200">
-                            Need to reconnect fast? Use the floating <strong>Save</strong> button (bottom-right) anytime.
+                            <strong>Tip:</strong> Use the floating <strong>Save</strong> button (bottom-right) to sync anytime!
                         </div>
                     </div>
                 </div>
